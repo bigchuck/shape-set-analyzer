@@ -41,6 +41,7 @@ def show_help() -> None:
     print("  set project <name>           Set active project")
     print("  show project                 Show active project")
     print("  add set <name> from <dir>    Scan files for a new set")
+    print("  verify set <name>            Verify stored source files")
     print("  quit                         Exit")
     print()
 
@@ -145,6 +146,131 @@ def handle_show_project(config: dict) -> None:
     print()
 
 
+def handle_verify_set(config: dict, set_name: str) -> None:
+    """Verify that a stored set's source files still exist and are unchanged."""
+    active_project = config.get("active_project")
+
+    if not active_project:
+        raise ProjectError(
+            "No active project. Use 'set project <name>'."
+        )
+
+    projects_directory = get_projects_directory(config)
+    project = get_project(projects_directory, active_project)
+    sets = project.get("sets", {})
+
+    if set_name not in sets:
+        raise ProjectError(
+            f"Set does not exist in project: {set_name}"
+        )
+
+    set_data = sets[set_name]
+    file_references = set_data.get("files", [])
+    base_import_directory = Path(
+        config["paths"]["base_import_directory"]
+    )
+
+    missing_files: list[str] = []
+    modified_files: list[str] = []
+    additional_files: list[str] = []
+
+    for file_reference in file_references:
+        relative_path = file_reference["relative_path"]
+        source_path = Path(relative_path)
+
+        if not source_path.is_absolute():
+            source_path = base_import_directory / source_path
+
+        if not source_path.is_file():
+            missing_files.append(relative_path)
+            continue
+
+        shape = read_shape_file(source_path)
+
+        if shape.metadata.modified != file_reference.get("modified"):
+            modified_files.append(relative_path)
+
+    source_spec = set_data.get("source", "").strip().rstrip("/\\")
+
+    if source_spec:
+        source_spec_path = Path(source_spec)
+        source_prefix = source_spec_path.name
+
+        if source_spec_path.is_absolute():
+            source_directory = source_spec_path.parent
+        else:
+            source_directory = (
+                base_import_directory / source_spec_path.parent
+            )
+
+        current_summary = summarize_directory(
+            directory=source_directory.resolve(),
+            prefix=source_prefix,
+        )
+        manifest_paths = {
+            Path(file_reference["relative_path"]).as_posix()
+            for file_reference in file_references
+        }
+
+        for current_path in current_summary.files:
+            if source_spec_path.is_absolute():
+                current_reference = current_path.as_posix()
+            else:
+                current_reference = (
+                    source_spec_path.parent / current_path.name
+                ).as_posix()
+
+            if current_reference not in manifest_paths:
+                additional_files.append(current_reference)
+
+    print()
+    print(f'VERIFY SET: "{set_name}"')
+    print()
+    print(f"  Manifest files: {len(file_references)}")
+    print(f"  Missing:        {len(missing_files)}")
+    print(f"  Modified:       {len(modified_files)}")
+    print(f"  Additional:     {len(additional_files)}")
+
+    if missing_files:
+        print()
+        print("  Missing files:")
+        for relative_path in missing_files[:5]:
+            print(f"    {relative_path}")
+        if len(missing_files) > 5:
+            print(
+                f"    ... {len(missing_files) - 5} more missing files"
+            )
+
+    if modified_files:
+        print()
+        print("  Modified files:")
+        for relative_path in modified_files[:5]:
+            print(f"    {relative_path}")
+        if len(modified_files) > 5:
+            print(
+                f"    ... {len(modified_files) - 5} more modified files"
+            )
+
+    if additional_files:
+        print()
+        print("  Additional matching files:")
+        for relative_path in additional_files[:5]:
+            print(f"    {relative_path}")
+        if len(additional_files) > 5:
+            print(
+                f"    ... {len(additional_files) - 5} more additional files"
+            )
+        print()
+        print("  The set may need to be rebuilt.")
+
+    print()
+    if missing_files or modified_files or additional_files:
+        print("  Status: verification failed.")
+    else:
+        print("  Status: verified.")
+    print()
+
+
 def get_prompt(config: dict) -> str:
     """Return the interactive prompt."""
     active_project = config.get("active_project")
@@ -197,6 +323,10 @@ def process_command(command: str, config: dict) -> bool:
 
     if normalized == ["show", "project"]:
         handle_show_project(config)
+        return True
+
+    if len(parts) == 3 and normalized[:2] == ["verify", "set"]:
+        handle_verify_set(config, parts[2])
         return True
     
     if (
@@ -335,7 +465,7 @@ def handle_add_set_scan(
         )
 
         set_data = import_shape_set(
-            [summary.files[0]],
+            summary.files,
             source=source_spec,
         )
 
