@@ -206,43 +206,24 @@ def import_shape_set(
     *,
     source: str,
 ) -> dict[str, Any]:
-    """Read ShapeStudio files and build one project set."""
-    shapes: list[dict[str, Any]] = []
+    """Read ShapeStudio files and build one project set manifest."""
+    file_references: list[dict[str, Any]] = []
+    source_directory = Path(source).parent
 
     for path in files:
         shape = read_shape_file(path)
+        relative_path = source_directory / path.name
 
-        shapes.append(
+        file_references.append(
             {
-                "source_file": shape.source_file.name,
-                "name": shape.name,
-                "type": shape.shape_type,
-                "points": [
-                    [x, y]
-                    for x, y in shape.points
-                ],
-                "style": {
-                    "color": shape.style.color,
-                    "width": shape.style.width,
-                    "transparency": shape.style.transparency,
-                    "z_coord": shape.style.z_coord,
-                    "fill": shape.style.fill,
-                },
-                "procedure": {
-                    "method": shape.procedure.method,
-                    "parameters": shape.procedure.parameters,
-                    "statistics": shape.procedure.statistics,
-                },
-                "metadata": {
-                    "created": shape.metadata.created,
-                    "modified": shape.metadata.modified,
-                    "tags": list(shape.metadata.tags),
-                },
+                "relative_path": relative_path.as_posix(),
+                "shape_name": shape.name,
+                "modified": shape.metadata.modified,
             }
         )
 
     return {
         "source": source,
-        "file_count": len(shapes),
-        "shapes": shapes,
+        "file_count": len(file_references),
+        "files": file_references,
     }
