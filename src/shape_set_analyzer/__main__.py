@@ -14,12 +14,17 @@ from .config import (
 )
 from .projects import (
     ProjectError,
+    add_set_to_project,
     create_project,
     get_project,
     get_project_names,
 )
 
-from .imports import ImportScanError, summarize_directory
+from .imports import (
+    ImportScanError,
+    import_shape_set,
+    summarize_directory,
+)
 from shape_set_analyzer.imports.importer import read_shape_file
 
 def show_help() -> None:
@@ -253,7 +258,7 @@ def handle_add_set_scan(
     source_spec: str,
 ) -> None:
     """
-    Scan ShapeStudio files and read the first matching file.
+    Scan ShapeStudio files and save the first matching file as a set.
 
     Example:
 
@@ -322,6 +327,25 @@ def handle_add_set_scan(
             summary.files[0]
         )
 
+        projects_directory = get_projects_directory(config)
+
+        project = get_project(
+            projects_directory,
+            active_project,
+        )
+
+        set_data = import_shape_set(
+            [summary.files[0]],
+            source=source_spec,
+        )
+
+        add_set_to_project(
+            projects_directory,
+            project,
+            set_name,
+            set_data,
+        )
+
     print()
     print(f"Scanning directory : {summary.directory}")
     print(f"Filename pattern   : {summary.prefix}_*.json")
@@ -332,7 +356,7 @@ def handle_add_set_scan(
         print("No matching ShapeStudio files were found.")
     else:
         print(
-            "Discovery completed; project was not modified."
+            "One-file set saved to the active project."
         )
 
     if first_shape is not None:
