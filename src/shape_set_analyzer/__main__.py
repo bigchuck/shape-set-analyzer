@@ -1,10 +1,52 @@
 """Command-line entry point for Shape Set Analyzer."""
 
-from shape_set_analyzer import __version__
+from pathlib import Path
+
+from . import __version__
+from .config import ConfigError, ensure_program_directories, load_config
+
+
+def show_help() -> None:
+    """Display available commands."""
+    print()
+    print("Available commands:")
+    print("  help      Show this help")
+    print("  status    Show program status")
+    print("  quit      Exit the program")
+    print()
+
+
+def show_status(config: dict) -> None:
+    """Display configuration and path status."""
+    paths = config["paths"]
+    base_import = Path(paths["base_import_directory"])
+
+    print()
+    print("PROGRAM STATUS")
+    print()
+    print(f"  Version:               {__version__}")
+    print(f"  Active project:        {config.get('active_project') or 'none'}")
+    print(f"  Projects directory:    {paths['projects_directory']}")
+    print(f"  Reports directory:     {paths['reports_directory']}")
+    print(f"  Base import directory: {base_import}")
+    print(
+        f"  Base import exists:    "
+        f"{'yes' if base_import.is_dir() else 'no'}"
+    )
+    print()
 
 
 def main() -> None:
-    """Run the initial Shape Set Analyzer command loop."""
+    """Run the interactive CLI."""
+    try:
+        config = load_config()
+        ensure_program_directories(config)
+    except ConfigError as exc:
+        print("Shape Set Analyzer could not start.")
+        print()
+        print(exc)
+        raise SystemExit(1) from exc
+
     print(f"Shape Set Analyzer {__version__}")
     print("Type 'help' for assistance or 'quit' to exit.")
     print()
@@ -28,11 +70,11 @@ def main() -> None:
             break
 
         if command_lower == "help":
-            print()
-            print("Available commands:")
-            print("  help    Show this help")
-            print("  quit    Exit the program")
-            print()
+            show_help()
+            continue
+
+        if command_lower == "status":
+            show_status(config)
             continue
 
         print(f"Unknown command: {command}")
