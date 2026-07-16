@@ -1,0 +1,22 @@
+# Python virtual environment
+.venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Development tools
+.vscode/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local program configuration and runtime files
+config.json
+*.log

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shape-set-analyzer"
+version = "0.1.0"
+description = "CLI analysis tool for ShapeStudio-generated shape sets"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Chuck Hackett" }
+]
+
+[project.scripts]
+shape-analyzer = "shape_set_analyzer.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
