@@ -79,3 +79,26 @@ def ensure_program_directories(config: dict[str, Any]) -> None:
             raise ConfigError(
                 f"Unable to create {name}: {directory}\n{exc}"
             ) from exc
+        
+def save_config(
+    config: dict[str, Any],
+    config_path: Path | None = None,
+) -> None:
+    """Write the current program configuration."""
+    path = config_path or Path.cwd() / "config.json"
+    temporary_path = path.with_suffix(".json.tmp")
+
+    try:
+        with temporary_path.open("w", encoding="utf-8") as file:
+            json.dump(config, file, indent=2)
+            file.write("\n")
+
+        temporary_path.replace(path)
+
+    except OSError as exc:
+        if temporary_path.exists():
+            temporary_path.unlink(missing_ok=True)
+
+        raise ConfigError(
+            f"Unable to write configuration file: {path}\n{exc}"
+        ) from exc

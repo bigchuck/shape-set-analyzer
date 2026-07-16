@@ -1,9 +1,15 @@
-"""Configuration support for Shape Set Analyzer."""
+"""Configuration support."""
 
-from .loader import ConfigError, ensure_program_directories, load_config
+from .loader import (
+    ConfigError,
+    ensure_program_directories,
+    load_config,
+    save_config,
+)
 
 __all__ = [
     "ConfigError",
     "ensure_program_directories",
     "load_config",
+    "save_config",
 ]
