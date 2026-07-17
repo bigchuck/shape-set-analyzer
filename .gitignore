@@ -8,6 +8,7 @@ __pycache__/
 
 # Temporary ChatGPT patches
 patches/
+*.zip
 
 # Packaging
 build/
