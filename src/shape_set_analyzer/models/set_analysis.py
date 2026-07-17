@@ -12,6 +12,7 @@ class AnalysisSection:
     """Collected observations for one area of set analysis."""
 
     observations: dict[str, Any] = field(default_factory=dict)
+    classifications: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -132,3 +133,68 @@ def _value_type_name(value: Any) -> str:
         return "object"
 
     return type(value).__name__
+
+def classify_parameter_summary(
+    analysis: SetAnalysis,
+) -> None:
+    """Classify all collected parameter observations."""
+
+    analysis.parameters.classifications.clear()
+
+    expected_files = analysis.metadata.files_analyzed
+
+    for path, observation in analysis.parameters.observations.items():
+        analysis.parameters.classifications[path] = (
+            _classify_observation(
+                observation,
+                expected_files,
+            )
+        )
+
+
+def _classify_observation(
+    observation: dict[str, Any],
+    expected_files: int,
+) -> dict[str, Any]:
+    """Return the classification for one parameter."""
+
+    result: dict[str, Any] = {
+        "classification": "constant",
+    }
+
+    if observation["seen_in_files"] != expected_files:
+        result["classification"] = "structural_conflict"
+        result["reason"] = "missing_parameter"
+        return result
+
+    if len(observation["types"]) != 1:
+        result["classification"] = "structural_conflict"
+        result["reason"] = "mixed_types"
+        return result
+
+    values = list(observation["values"].values())
+
+    if len(values) == 1:
+        result["value"] = values[0]["value"]
+        return result
+
+    result["classification"] = "varying"
+
+    first_value = values[0]["value"]
+
+    if isinstance(first_value, (int, float)) and not isinstance(first_value, bool):
+        numeric_values = [
+            item["value"]
+            for item in values
+        ]
+
+        result["observed_min"] = min(numeric_values)
+        result["observed_max"] = max(numeric_values)
+
+    else:
+        result["distinct_values"] = [
+            item["value"]
+            for item in values
+        ]
+
+    return result

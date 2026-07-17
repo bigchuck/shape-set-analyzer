@@ -10,6 +10,11 @@ from shape_set_analyzer.models.imported_shape import (
     ShapeProcedure,
     ShapeStyle,
 )
+from shape_set_analyzer.models.set_analysis import (
+    SetAnalysis,
+    classify_parameter_summary,
+    update_parameter_summary,
+)
 
 
 class ShapeImportError(Exception):
@@ -209,9 +214,11 @@ def import_shape_set(
     """Read ShapeStudio files and build one project set manifest."""
     file_references: list[dict[str, Any]] = []
     source_directory = Path(source).parent
+    analysis = SetAnalysis()
 
     for path in files:
         shape = read_shape_file(path)
+        update_parameter_summary(analysis, shape)
         relative_path = source_directory / path.name
 
         file_references.append(
@@ -221,6 +228,8 @@ def import_shape_set(
                 "modified": shape.metadata.modified,
             }
         )
+
+    classify_parameter_summary(analysis)
 
     return {
         "source": source,
