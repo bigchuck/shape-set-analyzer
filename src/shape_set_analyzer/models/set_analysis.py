@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import statistics
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Iterator
@@ -133,6 +135,204 @@ def _value_type_name(value: Any) -> str:
         return "object"
 
     return type(value).__name__
+
+def update_statistics_summary(
+    analysis: SetAnalysis,
+    shape: ImportedShape,
+) -> None:
+    """Add one shape's procedure statistics to a set analysis."""
+    for path, value in _walk_parameter_values(
+        shape.procedure.statistics,
+        prefix="procedure.statistics",
+    ):
+        _record_statistic(
+            analysis.statistics,
+            path,
+            value,
+            shape.source_file.as_posix(),
+        )
+
+
+def _record_statistic(
+    section: AnalysisSection,
+    path: str,
+    value: Any,
+    source_file: str,
+) -> None:
+    """Record one numeric procedure statistic."""
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+    ):
+        return
+
+    observation = section.observations.setdefault(
+        path,
+        {
+            "seen_in_files": 0,
+            "values": [],
+        },
+    )
+
+    observation["seen_in_files"] += 1
+    observation["values"].append(
+        {
+            "value": value,
+            "source_file": source_file,
+        }
+    )
+
+
+def classify_statistics_summary(
+    analysis: SetAnalysis,
+) -> None:
+    """Calculate set-wide summaries for procedure statistics."""
+    analysis.statistics.classifications.clear()
+
+    expected_files = analysis.metadata.files_analyzed
+
+    for path, observation in analysis.statistics.observations.items():
+        values = [
+            item["value"]
+            for item in observation["values"]
+        ]
+
+        classification: dict[str, Any] = {
+            "count": len(values),
+            "minimum": min(values),
+            "maximum": max(values),
+            "mean": statistics.fmean(values),
+            "median": statistics.median(values),
+        }
+
+        if observation["seen_in_files"] != expected_files:
+            classification["structural_conflict"] = (
+                "missing_statistic"
+            )
+
+        analysis.statistics.classifications[path] = classification
+
+def update_geometry_summary(
+    analysis: SetAnalysis,
+    shape: ImportedShape,
+) -> None:
+    """Add one shape's geometry measurements to a set analysis."""
+    points = shape.points
+    x_values = [point[0] for point in points]
+    y_values = [point[1] for point in points]
+
+    bounding_width = max(x_values) - min(x_values)
+    bounding_height = max(y_values) - min(y_values)
+    shorter_dimension = min(bounding_width, bounding_height)
+
+    perimeter = _polygon_perimeter(points)
+    area = _polygon_area(points)
+
+    measurements: dict[str, int | float] = {
+        "point_count": len(points),
+        "bounding_width": bounding_width,
+        "bounding_height": bounding_height,
+        "bounding_area": bounding_width * bounding_height,
+        "aspect_ratio": (
+            max(bounding_width, bounding_height) / shorter_dimension
+            if shorter_dimension > 0
+            else 0.0
+        ),
+        "polygon_area": area,
+        "perimeter": perimeter,
+        "compactness": (
+            4.0 * math.pi * area / (perimeter * perimeter)
+            if perimeter > 0
+            else 0.0
+        ),
+    }
+
+    source_file = shape.source_file.as_posix()
+
+    for name, value in measurements.items():
+        _record_geometry_measure(
+            analysis.geometry,
+            name,
+            value,
+            source_file,
+        )
+
+
+def _polygon_perimeter(
+    points: tuple[tuple[float, float], ...],
+) -> float:
+    """Return the perimeter of a closed polygon."""
+    return sum(
+        math.hypot(
+            next_point[0] - point[0],
+            next_point[1] - point[1],
+        )
+        for point, next_point in zip(
+            points,
+            points[1:] + points[:1],
+        )
+    )
+
+
+def _polygon_area(
+    points: tuple[tuple[float, float], ...],
+) -> float:
+    """Return the absolute area using the shoelace formula."""
+    signed_area_twice = sum(
+        point[0] * next_point[1]
+        - next_point[0] * point[1]
+        for point, next_point in zip(
+            points,
+            points[1:] + points[:1],
+        )
+    )
+
+    return abs(signed_area_twice) / 2.0
+
+
+def _record_geometry_measure(
+    section: AnalysisSection,
+    name: str,
+    value: int | float,
+    source_file: str,
+) -> None:
+    """Record one numeric geometry measurement."""
+    observation = section.observations.setdefault(
+        name,
+        {
+            "seen_in_files": 0,
+            "values": [],
+        },
+    )
+
+    observation["seen_in_files"] += 1
+    observation["values"].append(
+        {
+            "value": value,
+            "source_file": source_file,
+        }
+    )
+
+
+def classify_geometry_summary(
+    analysis: SetAnalysis,
+) -> None:
+    """Calculate set-wide summaries for geometry measurements."""
+    analysis.geometry.classifications.clear()
+
+    for name, observation in analysis.geometry.observations.items():
+        values = [
+            item["value"]
+            for item in observation["values"]
+        ]
+
+        analysis.geometry.classifications[name] = {
+            "count": len(values),
+            "minimum": min(values),
+            "maximum": max(values),
+            "mean": statistics.fmean(values),
+            "median": statistics.median(values),
+        }
 
 def classify_parameter_summary(
     analysis: SetAnalysis,

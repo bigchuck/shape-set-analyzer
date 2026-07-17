@@ -12,10 +12,13 @@ from shape_set_analyzer.models.imported_shape import (
 )
 from shape_set_analyzer.models.set_analysis import (
     SetAnalysis,
+    classify_geometry_summary,
     classify_parameter_summary,
+    classify_statistics_summary,
+    update_geometry_summary,
     update_parameter_summary,
+    update_statistics_summary,
 )
-
 
 class ShapeImportError(Exception):
     """Raised when a ShapeStudio file cannot be imported."""
@@ -219,6 +222,9 @@ def import_shape_set(
     for path in files:
         shape = read_shape_file(path)
         update_parameter_summary(analysis, shape)
+        update_statistics_summary(analysis, shape)
+        update_geometry_summary(analysis, shape)
+
         relative_path = source_directory / path.name
 
         file_references.append(
@@ -230,6 +236,8 @@ def import_shape_set(
         )
 
     classify_parameter_summary(analysis)
+    classify_statistics_summary(analysis)
+    classify_geometry_summary(analysis)
 
     return {
         "source": source,
