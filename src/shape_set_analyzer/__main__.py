@@ -42,6 +42,7 @@ def show_help() -> None:
     print("  show project                 Show active project")
     print("  add set <name> from <dir>    Scan files for a new set")
     print("  verify set <name>            Verify stored source files")
+    print("  report set <name>            Report stored set analysis")
     print("  quit                         Exit")
     print()
 
@@ -270,6 +271,84 @@ def handle_verify_set(config: dict, set_name: str) -> None:
         print("  Status: verified.")
     print()
 
+def format_report_value(
+    measurement_name: str,
+    field_name: str,
+    value: object,
+) -> str:
+    """Format one value for the simple set report."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return str(value)
+
+    if (
+        measurement_name in {"bounding_area", "polygon_area"}
+        and field_name != "count"
+    ):
+        return f"{value / 1000.0:.1f}K"
+
+    if isinstance(value, float):
+        return f"{value:.4f}"
+
+    return str(value)
+
+def handle_report_set(config: dict, set_name: str) -> None:
+    """Display the stored analysis for one set."""
+    active_project = config.get("active_project")
+
+    if not active_project:
+        raise ProjectError(
+            "No active project. Use 'set project <name>'."
+        )
+
+    projects_directory = get_projects_directory(config)
+    project = get_project(projects_directory, active_project)
+    sets = project.get("sets", {})
+
+    if set_name not in sets:
+        raise ProjectError(
+            f"Set does not exist in project: {set_name}"
+        )
+
+    set_data = sets[set_name]
+    analysis = set_data.get("analysis")
+
+    if not isinstance(analysis, dict):
+        raise ProjectError(
+            f"Set has no stored analysis; rebuild set: {set_name}"
+        )
+
+    print()
+    print(f'SET REPORT: "{set_name}"')
+    print()
+    print(f"  Files analyzed: {set_data.get('file_count', 0)}")
+
+    for title, section_name in (
+        ("PARAMETERS", "parameters"),
+        ("STATISTICS", "statistics"),
+        ("GEOMETRY", "geometry"),
+    ):
+        section = analysis.get(section_name, {})
+
+        print()
+        print(title)
+        print()
+
+        if not section:
+            print("  No values recorded.")
+            continue
+
+        for name in sorted(section, key=str.casefold):
+            print(f"  {name}")
+
+            for field, value in section[name].items():
+                formatted_value = format_report_value(
+                    name,
+                    field,
+                    value,
+                )
+                print(f"    {field}: {formatted_value}")
+
+    print()
 
 def get_prompt(config: dict) -> str:
     """Return the interactive prompt."""
@@ -327,6 +406,10 @@ def process_command(command: str, config: dict) -> bool:
 
     if len(parts) == 3 and normalized[:2] == ["verify", "set"]:
         handle_verify_set(config, parts[2])
+        return True
+    
+    if len(parts) == 3 and normalized[:2] == ["report", "set"]:
+        handle_report_set(config, parts[2])
         return True
     
     if (

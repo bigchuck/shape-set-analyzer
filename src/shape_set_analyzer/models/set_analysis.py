@@ -202,7 +202,7 @@ def classify_statistics_summary(
             "minimum": min(values),
             "maximum": max(values),
             "mean": statistics.fmean(values),
-            "median": statistics.median(values),
+            "standard_deviation": statistics.pstdev(values),
         }
 
         if observation["seen_in_files"] != expected_files:
@@ -331,7 +331,7 @@ def classify_geometry_summary(
             "minimum": min(values),
             "maximum": max(values),
             "mean": statistics.fmean(values),
-            "median": statistics.median(values),
+            "standard_deviation": statistics.pstdev(values),
         }
 
 def classify_parameter_summary(

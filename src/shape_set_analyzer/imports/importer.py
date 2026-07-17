@@ -243,4 +243,9 @@ def import_shape_set(
         "source": source,
         "file_count": len(file_references),
         "files": file_references,
+        "analysis": {
+            "parameters": analysis.parameters.classifications,
+            "statistics": analysis.statistics.classifications,
+            "geometry": analysis.geometry.classifications,
+        },
     }
