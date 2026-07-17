@@ -42,7 +42,7 @@ def show_help() -> None:
     print("  show project                 Show active project")
     print("  add set <name> from <dir>    Scan files for a new set")
     print("  verify set <name>            Verify stored source files")
-    print("  report set <name>            Report stored set analysis")
+    print("  report set <name> [--verbose] Report stored set analysis")
     print("  quit                         Exit")
     print()
 
@@ -291,7 +291,79 @@ def format_report_value(
 
     return str(value)
 
-def handle_report_set(config: dict, set_name: str) -> None:
+def format_condensed_parameter(classification: dict) -> str:
+    """Format one parameter classification on a single line."""
+    classification_name = classification.get(
+        "classification",
+        "unknown",
+    )
+
+    if "value" in classification:
+        values = format_report_value(
+            "",
+            "value",
+            classification["value"],
+        )
+    elif (
+        "observed_min" in classification
+        and "observed_max" in classification
+    ):
+        minimum = format_report_value(
+            "",
+            "observed_min",
+            classification["observed_min"],
+        )
+        maximum = format_report_value(
+            "",
+            "observed_max",
+            classification["observed_max"],
+        )
+        values = f"{minimum},{maximum}"
+    elif "distinct_values" in classification:
+        values = str(classification["distinct_values"])
+    elif "reason" in classification:
+        values = str(classification["reason"])
+    else:
+        values = ""
+
+    return f"{classification_name},({values})"
+
+
+def format_condensed_measurement(
+    measurement_name: str,
+    classification: dict,
+) -> str:
+    """Format one statistic or geometry summary on a single line."""
+    fields = (
+        "count",
+        "minimum",
+        "maximum",
+        "mean",
+        "standard_deviation",
+    )
+    values = [
+        format_report_value(
+            measurement_name,
+            field,
+            classification[field],
+        )
+        for field in fields
+    ]
+
+    summary = f"({','.join(values)})"
+
+    if "structural_conflict" in classification:
+        summary += f",{classification['structural_conflict']}"
+
+    return summary
+
+
+def handle_report_set(
+    config: dict,
+    set_name: str,
+    *,
+    verbose: bool = False,
+) -> None:
     """Display the stored analysis for one set."""
     active_project = config.get("active_project")
 
@@ -338,15 +410,29 @@ def handle_report_set(config: dict, set_name: str) -> None:
             continue
 
         for name in sorted(section, key=str.casefold):
-            print(f"  {name}")
+            classification = section[name]
 
-            for field, value in section[name].items():
-                formatted_value = format_report_value(
+            if verbose:
+                print(f"  {name}")
+
+                for field, value in classification.items():
+                    formatted_value = format_report_value(
+                        name,
+                        field,
+                        value,
+                    )
+                    print(f"    {field}: {formatted_value}")
+                continue
+
+            if section_name == "parameters":
+                summary = format_condensed_parameter(classification)
+            else:
+                summary = format_condensed_measurement(
                     name,
-                    field,
-                    value,
+                    classification,
                 )
-                print(f"    {field}: {formatted_value}")
+
+            print(f"  {name} {summary}")
 
     print()
 
@@ -408,8 +494,19 @@ def process_command(command: str, config: dict) -> bool:
         handle_verify_set(config, parts[2])
         return True
     
-    if len(parts) == 3 and normalized[:2] == ["report", "set"]:
-        handle_report_set(config, parts[2])
+    if (
+        len(parts) in {3, 4}
+        and normalized[:2] == ["report", "set"]
+        and (
+            len(parts) == 3
+            or normalized[3] == "--verbose"
+        )
+    ):
+        handle_report_set(
+            config,
+            parts[2],
+            verbose=len(parts) == 4,
+        )
         return True
     
     if (
