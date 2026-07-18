@@ -39,7 +39,7 @@ def show_help() -> None:
     print("  status                       Show program status")
     print("  list projects                List all projects")
     print("  create project <name>        Create a project")
-    print("  set project <name>           Set active project")
+    print("  set project [name]           Set or unset active project")
     print("  show project                 Show active project")
     print("  add set <name> from <dir>    Scan files for a new set")
     print("  remove set <name>            Remove a stored set")
@@ -107,8 +107,20 @@ def handle_create_project(config: dict, project_name: str) -> None:
     print()
 
 
-def handle_set_project(config: dict, project_name: str) -> None:
-    """Set and persist the active project."""
+def handle_set_project(
+    config: dict,
+    project_name: str | None,
+) -> None:
+    """Set, unset, and persist the active project."""
+    if project_name is None:
+        config["active_project"] = None
+        save_config(config)
+
+        print()
+        print("Active project unset.")
+        print()
+        return
+
     projects_directory = get_projects_directory(config)
     project = get_project(projects_directory, project_name)
     name = project["project"]["name"]
@@ -529,8 +541,12 @@ def process_command(command: str, config: dict) -> bool:
         handle_create_project(config, parts[2])
         return True
 
-    if len(parts) == 3 and normalized[:2] == ["set", "project"]:
-        handle_set_project(config, parts[2])
+    if (
+        len(parts) in {2, 3}
+        and normalized[:2] == ["set", "project"]
+    ):
+        project_name = parts[2] if len(parts) == 3 else None
+        handle_set_project(config, project_name)
         return True
 
     if normalized == ["show", "project"]:
