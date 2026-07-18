@@ -99,6 +99,29 @@ def add_set_to_project(
     )
 
 
+def remove_set_from_project(
+    projects_directory: Path,
+    project: dict[str, Any],
+    set_name: str,
+) -> None:
+    """Remove a stored shape set and save the project."""
+    sets = project.get("sets", {})
+
+    if set_name not in sets:
+        raise ProjectError(
+            f"Set does not exist in project: {set_name}"
+        )
+
+    del sets[set_name]
+    project["project"]["modified"] = current_timestamp()
+
+    save_project(
+        projects_directory,
+        project["project"]["name"],
+        project,
+    )
+
+
 def get_project(
     projects_directory: Path,
     project_name: str,

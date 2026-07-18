@@ -18,6 +18,7 @@ from .projects import (
     create_project,
     get_project,
     get_project_names,
+    remove_set_from_project,
 )
 
 from .imports import (
@@ -41,6 +42,7 @@ def show_help() -> None:
     print("  set project <name>           Set active project")
     print("  show project                 Show active project")
     print("  add set <name> from <dir>    Scan files for a new set")
+    print("  remove set <name>            Remove a stored set")
     print("  verify set <name>            Verify stored source files")
     print("  report set <name> [--verbose] Report stored set analysis")
     print("  quit                         Exit")
@@ -143,7 +145,52 @@ def handle_show_project(config: dict) -> None:
     print(f"  Schema version:   {project['schema_version']}")
     print(f"  Analysis version: {project['analysis_version']}")
     print(f"  Sets stored:      {len(sets)}")
+
+    for set_name in sorted(sets, key=str.casefold):
+        print(f"    {set_name} {sets[set_name]['source']}")
+
     print(f"  Master file:      {projects_directory / f'{active_project}.json'}")
+    print()
+
+
+def handle_remove_set(config: dict, set_name: str) -> None:
+    """Confirm and remove a stored set from the active project."""
+    active_project = config.get("active_project")
+
+    if not active_project:
+        raise ProjectError(
+            "No active project. Use 'set project <name>'."
+        )
+
+    projects_directory = get_projects_directory(config)
+    project = get_project(projects_directory, active_project)
+    sets = project.get("sets", {})
+
+    if set_name not in sets:
+        raise ProjectError(
+            f"Set does not exist in project: {set_name}"
+        )
+
+    confirmation = input(
+        f'Remove set "{set_name}" from project "{active_project}"? '
+        "Type REMOVE to confirm: "
+    ).strip()
+
+    if confirmation.casefold() != "remove":
+        print()
+        print("Set removal cancelled.")
+        print()
+        return
+
+    remove_set_from_project(
+        projects_directory,
+        project,
+        set_name,
+    )
+
+    print()
+    print(f"Set removed: {set_name}")
+    print(f"Sets remaining: {len(sets)}")
     print()
 
 
@@ -490,6 +537,10 @@ def process_command(command: str, config: dict) -> bool:
         handle_show_project(config)
         return True
 
+    if len(parts) == 3 and normalized[:2] == ["remove", "set"]:
+        handle_remove_set(config, parts[2])
+        return True
+
     if len(parts) == 3 and normalized[:2] == ["verify", "set"]:
         handle_verify_set(config, parts[2])
         return True
@@ -568,7 +619,7 @@ def handle_add_set_scan(
     source_spec: str,
 ) -> None:
     """
-    Scan ShapeStudio files and save the first matching file as a set.
+    Scan ShapeStudio files and save all matching files as a set.
 
     Example:
 
@@ -665,9 +716,7 @@ def handle_add_set_scan(
     if summary.file_count == 0:
         print("No matching ShapeStudio files were found.")
     else:
-        print(
-            "One-file set saved to the active project."
-        )
+        print("Set saved to the active project.")
 
     if first_shape is not None:
         print()

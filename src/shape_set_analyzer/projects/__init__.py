@@ -5,6 +5,7 @@ from .manager import (
     create_project,
     get_project,
     get_project_names,
+    remove_set_from_project,
     validate_project_name,
 )
 from .repository import ProjectError
@@ -15,5 +16,6 @@ __all__ = [
     "create_project",
     "get_project",
     "get_project_names",
+    "remove_set_from_project",
     "validate_project_name",
 ]
