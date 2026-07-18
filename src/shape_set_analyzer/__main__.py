@@ -27,6 +27,11 @@ from .imports import (
     summarize_directory,
 )
 from shape_set_analyzer.imports.importer import read_shape_file
+from .models.set_comparison import (
+    build_measurement_rows,
+    build_parameter_rows,
+    format_comparison_rows,
+)
 
 def show_help() -> None:
     """Display available commands."""
@@ -45,6 +50,7 @@ def show_help() -> None:
     print("  remove set <name>            Remove a stored set")
     print("  verify set <name>            Verify stored source files")
     print("  report set <name> [--verbose] Report stored set analysis")
+    print("  compare sets <name1> <name2> Compare two stored sets")
     print("  quit                         Exit")
     print()
 
@@ -495,6 +501,99 @@ def handle_report_set(
 
     print()
 
+
+def handle_compare_sets(
+    config: dict,
+    first_name: str,
+    second_name: str,
+) -> None:
+    """Display a transient comparison of two stored sets."""
+    active_project = config.get("active_project")
+
+    if not active_project:
+        raise ProjectError(
+            "No active project. Use 'set project <name>'."
+        )
+
+    if first_name == second_name:
+        raise ProjectError("Choose two different sets to compare.")
+
+    projects_directory = get_projects_directory(config)
+    project = get_project(projects_directory, active_project)
+    sets = project.get("sets", {})
+
+    for set_name in (first_name, second_name):
+        if set_name not in sets:
+            raise ProjectError(
+                f"Set does not exist in project: {set_name}"
+            )
+
+        if not isinstance(sets[set_name].get("analysis"), dict):
+            raise ProjectError(
+                f"Set has no stored analysis; rebuild set: {set_name}"
+            )
+
+    first_set = sets[first_name]
+    second_set = sets[second_name]
+    first_analysis = first_set["analysis"]
+    second_analysis = second_set["analysis"]
+
+    print()
+    print(f'SET COMPARISON: "{second_name}" relative to "{first_name}"')
+    print()
+    print("SET SUMMARY")
+    print()
+    print(
+        f"  {first_name}: source={first_set.get('source', '')}, "
+        f"files={first_set.get('file_count', 0)}"
+    )
+    print(
+        f"  {second_name}: source={second_set.get('source', '')}, "
+        f"files={second_set.get('file_count', 0)}"
+    )
+
+    sections = (
+        (
+            "PARAMETERS",
+            build_parameter_rows,
+            first_analysis.get("parameters", {}),
+            second_analysis.get("parameters", {}),
+        ),
+        (
+            "STATISTICS",
+            build_measurement_rows,
+            first_analysis.get("statistics", {}),
+            second_analysis.get("statistics", {}),
+        ),
+        (
+            "GEOMETRY",
+            build_measurement_rows,
+            first_analysis.get("geometry", {}),
+            second_analysis.get("geometry", {}),
+        ),
+    )
+
+    for title, row_builder, first_section, second_section in sections:
+        print()
+        print(title)
+        print()
+
+        rows = row_builder(first_section, second_section)
+        lines = format_comparison_rows(
+            rows,
+            first_name,
+            second_name,
+        )
+
+        if not lines:
+            print("  No values recorded.")
+            continue
+
+        for line in lines:
+            print(line)
+
+    print()
+
 def get_prompt(config: dict) -> str:
     """Return the interactive prompt."""
     active_project = config.get("active_project")
@@ -551,6 +650,10 @@ def process_command(command: str, config: dict) -> bool:
 
     if normalized == ["show", "project"]:
         handle_show_project(config)
+        return True
+
+    if len(parts) == 4 and normalized[:2] == ["compare", "sets"]:
+        handle_compare_sets(config, parts[2], parts[3])
         return True
 
     if len(parts) == 3 and normalized[:2] == ["remove", "set"]:
