@@ -24,6 +24,8 @@ def build_parameter_rows(
     second: dict[str, Any],
 ) -> list[ComparisonRow]:
     """Return every parameter in deterministic path order."""
+    first = _flatten_parameter_section(first)
+    second = _flatten_parameter_section(second)
     names = sorted(set(first) | set(second), key=str.casefold)
     rows: list[ComparisonRow] = []
 
@@ -57,9 +59,10 @@ def build_measurement_rows(
     """Return measurements sorted by descending normalized mean difference."""
     rows: list[ComparisonRow] = []
 
-    for name in set(first) & set(second):
-        first_mean = _measurement_mean(first.get(name))
-        second_mean = _measurement_mean(second.get(name))
+    for stored_name in set(first) & set(second):
+        name = _flatten_measurement_name(stored_name)
+        first_mean = _measurement_mean(first.get(stored_name))
+        second_mean = _measurement_mean(second.get(stored_name))
         first_display = _format_measurement_value(name, first_mean)
         second_display = _format_measurement_value(name, second_mean)
         sort_difference = _normalized_difference(first_mean, second_mean)
@@ -83,6 +86,118 @@ def build_measurement_rows(
         rows,
         key=lambda row: (-row.sort_difference, row.name.casefold()),
     )
+
+
+def _flatten_parameter_section(
+    section: dict[str, Any],
+) -> dict[str, Any]:
+    """Return comparison-only parameter names and expanded operations."""
+    flattened: dict[str, Any] = {}
+
+    for stored_name, classification in section.items():
+        name = _flatten_parameter_name(stored_name)
+
+        if name == "operations":
+            operations = _expand_operations(classification)
+            if operations:
+                flattened.update(operations)
+                continue
+
+        flattened[name] = classification
+
+    return flattened
+
+
+def _flatten_parameter_name(name: str) -> str:
+    """Remove internal procedure hierarchy from a parameter name."""
+    for prefix in ("procedure.parameters.", "procedure."):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+def _flatten_measurement_name(name: str) -> str:
+    """Remove the internal statistics hierarchy from a report name."""
+    prefix = "procedure.statistics."
+    if name.startswith(prefix):
+        return name[len(prefix):]
+    return name
+
+
+def _expand_operations(classification: Any) -> dict[str, Any]:
+    """Expand an operations list into one classification per operation."""
+    if not isinstance(classification, dict):
+        return {}
+
+    if "value" in classification:
+        operation_sets = [classification["value"]]
+    elif "distinct_values" in classification:
+        operation_sets = classification["distinct_values"]
+    else:
+        return {}
+
+    mappings: list[dict[str, Any]] = []
+    for operation_set in operation_sets:
+        mapping = _operation_mapping(operation_set)
+        if mapping is None:
+            return {}
+        mappings.append(mapping)
+
+    operation_names = sorted(
+        {name for mapping in mappings for name in mapping},
+        key=str.casefold,
+    )
+    expanded: dict[str, Any] = {}
+
+    for operation_name in operation_names:
+        values = [
+            mapping[operation_name]
+            for mapping in mappings
+            if operation_name in mapping
+        ]
+        path = f"operations.{operation_name}"
+
+        if len(values) != len(mappings):
+            expanded[path] = {
+                "classification": "structural_conflict",
+                "reason": "missing_operation",
+            }
+        elif all(value == values[0] for value in values[1:]):
+            expanded[path] = {
+                "classification": "constant",
+                "value": values[0],
+            }
+        elif all(_is_number(value) for value in values):
+            expanded[path] = {
+                "classification": "varying",
+                "observed_min": min(values),
+                "observed_max": max(values),
+            }
+        else:
+            expanded[path] = {
+                "classification": "varying",
+                "distinct_values": values,
+            }
+
+    return expanded
+
+
+def _operation_mapping(value: Any) -> dict[str, Any] | None:
+    """Convert a list of [operation, value] pairs into a mapping."""
+    if not isinstance(value, list):
+        return None
+
+    mapping: dict[str, Any] = {}
+    for item in value:
+        if (
+            not isinstance(item, list)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+        ):
+            return None
+        mapping[item[0]] = item[1]
+
+    return mapping
 
 
 def format_comparison_rows(
